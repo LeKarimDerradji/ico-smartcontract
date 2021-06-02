@@ -56,10 +56,6 @@ contract Ico is Ownable {
          _rate = 1 gwei;
          _aeternam = Aeternam(aeternamAddress_);
     }
-    
-    function returnString() public view onlyOwner returns(string memory)   {
-        return "hello";
-    }
 
     modifier icoIsActive {
         require(

@@ -15,7 +15,9 @@ describe('Aeternam Token', async function () {
     aeternam = await Aeternam.connect(dev).deploy(owner.address, INIT_SUPPLY);
     await aeternam.deployed();
     Ico = await ethers.getContractFactory('Ico');
-    ico = await Ico.connect(owner).deploy(aeternam.address);
+    ico = await Ico.connect(owner).deploy(aeternam.address, 1628410088,  1629101288); 
+                                                         /* 1628410088 is 08/08/2021 at 8h8m8s GMT time, 
+                                                                         1629101288 is 08/16/2021 at 8h8m8s GMT time */
     await ico.deployed();
     await aeternam.connect(owner).approve(ico.address, INIT_SUPPLY);
   });
@@ -33,13 +35,12 @@ describe('Aeternam Token', async function () {
     expect(await aeternam.balanceOf(owner.address)).to.equal(INIT_SUPPLY);
   });
 
-  describe('ICO', async function () {
+  describe('ICO INIT-SUPPY', async function () {
     it('Should approve the Ico contract to manipulate the total supply', async function () {
       expect(await aeternam.allowance(owner.address, ico.address)).to.be.equal(INIT_SUPPLY);
     });
-    it('The function should only be able to be called by the owner', async function () {
-      expect(await ico.connect(owner).returnString())
-      .to.be.equal('hello');
-    });
+  describe('ICO : Time Based Logic', async function () {
+
+  })
   });
 });
