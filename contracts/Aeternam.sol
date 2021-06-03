@@ -12,6 +12,7 @@ contract Aeternam is ERC20, Ownable {
     * all the people that will participate in the ICO.
      */
     constructor(address owner_, uint256 initialSupply_) ERC20("Aeternam", "AETER") {
+        transferOwnership(owner_);
         _mint(owner_, initialSupply_);
     }
 

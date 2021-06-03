@@ -48,33 +48,55 @@ contract Ico is Ownable {
     * The time, in epoch, when the Ico should begins.
     * The time, in epoch, when the Ico should end. 
     * */
-    constructor(address aeternamAddress_,
-    uint256  icoStartTime_, 
-    uint256 icoEndTime_) Ownable()  {
-         _icoStartTime = icoStartTime_;
-         _icoEndTime = icoEndTime_;
-         _rate = 1 gwei;
-         _aeternam = Aeternam(aeternamAddress_);
+    constructor(
+        address aeternamAddress_,
+        uint256  icoStartTime_, 
+        uint256 icoEndTime_,
+        uint256 rate_) Ownable()  {
+             _icoStartTime = icoStartTime_;
+             _icoEndTime = icoEndTime_;
+             _rate = rate_;
+            _aeternam = Aeternam(aeternamAddress_);
     }
 
     modifier icoIsActive {
         require(
-            _icoStartTime >= block.timestamp && _icoEndTime <= block.timestamp,
-            "Ico : the Ico is either not active yet or already ended."
-        );
+            block.timestamp >= _icoStartTime,
+            "Ico : the Ico is not started yet."
+            );
+        require(
+            block.timestamp <= _icoEndTime,
+            "Ico : the Ico ended"
+            );
+        _;
+    }
+
+    modifier icoIsOver {
+        require(_icoStartTime <= block.timestamp, "The Ico is not over yet");
         _;
     }
 
     
-    
+    // Create a mapping so that the tokens are bind to _balances
     function buyTokens() public payable icoIsActive {
-        require(msg.sender != owner(),"Ico : The owner Ico can't buy tokens!");
+        require(msg.sender != owner(),"Ico : The owner of Ico can't buy tokens!");
         require(msg.sender != _aeternam.owner(), "Ico : the owner of the token can't buy tokens!");
-        uint256 purchaseInWei = msg.value; // Calculate tokens to sell
-        uint256 purchaseInGwei = purchaseInWei / _rate;
-    
-        _aeternam.transfer(msg.sender, purchaseInGwei); // Send tokens to buyer
-    
+        uint256 amount = msg.value * _rate; // Taking the msg.value, storing it in wei
+
+        _aeternam.transferFrom(_aeternam.owner(), msg.sender, amount); // Send tokens to buyer
+        // TokenBuyed(msg.sender, amounnt);
+   } 
+
+   function withdraw() public onlyOwner {
+       
    }
+
+   
+
+   // withdraw only when the ico is over
+
+   // IMPLEMENT ALL THE EVENTS AND TEST THEM
+
+   // Create another Ico with an experimental incentive if you have the time. 
 
 }
