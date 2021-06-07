@@ -2,101 +2,98 @@
 pragma solidity ^0.8.4;
 
 import "./Aeternam.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-
+/// @title ICO Smart Contract
+/// @author LeKarimDerradji
+/// @notice We define the token as a "state variable" that will be of the Type of the Contract 
+/// @dev so that the contract will inherit all the functionalities and implicit bytecodes of the 
+/// Token contract.
 contract Ico is Ownable {
 
-    /**
-    * @dev 
-    * We define the token as a "state variable" that will be of the Type of the Contract 
-    * so that the contract will inherit all the functionalities and implicit bytecodes of the 
-    * Token contract.
-    * */
+    using Address for address payable;
+
     Aeternam private _aeternam;
-    
-   /* address private _owner; */
-
-    /**
-    * @dev
-    * Here, we can set up a mapping to track the beneficiaries of the Ico
-    * All the people that will buy the token during the Ico will be beneficiaries. 
-    * */
-    mapping(address => uint256) private _beneficiaries;   
 
     /**
     * @dev 
-    * Here we need to set up two important storage variables to keep track of the begining of the Ico
-    * And the end of the Ico. 
-    * */
-    uint256 private _icoStartTime;
-    uint256 private _icoEndTime; 
+    * This variable sets the duration of the ICO 
+    */
+    uint256 private _icoDuration;
     
 
     /**
     * @dev 
     * Last but not least, we need to set up the rate of which buyers will get tokens in comparaison to the amount 
     * of gwei that they put into the smart contract. 
-    * */
+    */
     uint256 private _rate;
+
+    event TokenBuyed(address indexed investor, uint256 amount);
+    event Withdrew(address indexed icoWwallet, uint256 amount);
     
     /**
     * @dev 
+    *@param aeternamAddress_ is for the address of the token to be passed in
+    *@param rate_ is for the rate of exchange for the token to be buyed
     * This is were the Ico contract is deployed, inside the constructor, we pass as an argument : 
     * The address of the Smart Contract that is our Token, so that the functions can be avaible everywhere in our contract. 
     * The Rate, amount of Token for a given amount of Gwei.
-    * The time, in epoch, when the Ico should begins.
-    * The time, in epoch, when the Ico should end. 
-    * */
+    */
     constructor(
         address aeternamAddress_,
-        uint256  icoStartTime_, 
-        uint256 icoEndTime_,
         uint256 rate_) Ownable()  {
-             _icoStartTime = icoStartTime_;
-             _icoEndTime = icoEndTime_;
+             _icoDuration = block.timestamp + 1 weeks;
              _rate = rate_;
-            _aeternam = Aeternam(aeternamAddress_);
+             _aeternam = Aeternam(aeternamAddress_);
     }
-
-    modifier icoIsActive {
-        require(
-            block.timestamp >= _icoStartTime,
-            "Ico : the Ico is not started yet."
-            );
-        require(
-            block.timestamp <= _icoEndTime,
-            "Ico : the Ico ended"
-            );
-        _;
-    }
-
+    /**
+    *@dev
+    * modifier for when the ico is over
+    * */
     modifier icoIsOver {
-        require(_icoStartTime <= block.timestamp, "The Ico is not over yet");
+        require(block.timestamp >= _icoDuration, "ICO: Ico is not over yet");
         _;
     }
 
     
-    // Create a mapping so that the tokens are bind to _balances
-    function buyTokens() public payable icoIsActive {
-        require(msg.sender != owner(),"Ico : The owner of Ico can't buy tokens!");
-        require(msg.sender != _aeternam.owner(), "Ico : the owner of the token can't buy tokens!");
-        uint256 amount = msg.value * _rate; // Taking the msg.value, storing it in wei
-
-        _aeternam.transferFrom(_aeternam.owner(), msg.sender, amount); // Send tokens to buyer
-        // TokenBuyed(msg.sender, amounnt);
+    /**
+    *@dev
+    * The function buy tokens takes no parameters, the user buy some tokens by sending wei, 
+    * it gets converted to gwei, where 1 gwei equals 1 token
+    * then it transfers the token from the aeternam contract to the users wallet
+    * */
+    function buyTokens() public payable {
+        require(msg.sender != owner(),"ICO : The owner of Ico can't buy tokens!");
+        require(_aeternam.allowance(_aeternam.owner(), address(this)) > 10000000000, "ICO : aeternam is not being sold yet.");
+        uint256 amount = msg.value * _rate;
+        // Rate is for how many ether units, how many tokens I get. 
+        _aeternam.transferFrom(_aeternam.owner(), msg.sender, amount); 
+        emit TokenBuyed(msg.sender, amount);
    } 
-
-   function withdraw() public onlyOwner {
-       
-   }
-
-   
-
-   // withdraw only when the ico is over
-
-   // IMPLEMENT ALL THE EVENTS AND TEST THEM
-
-   // Create another Ico with an experimental incentive if you have the time. 
+    /**
+    *@dev
+    * function for the owner to withdraw their profit
+    * */
+     function withdrawProfit() public onlyOwner icoIsOver {
+        require(address(this).balance > 0, "ICO: cannot withdraw 0 ether");
+        uint256 amount = address(this).balance;
+        payable(msg.sender).sendValue(amount);
+        emit Withdrew(msg.sender, amount);
+    }
+    /**
+    *@dev shows the balance in wei into the ico contract
+    * */
+    function balanceOfIco() public view returns(uint256) {
+        return address(this).balance;
+    }
+    /**
+    *@dev shows the remaining token the ico contract can spend
+    *
+    * */
+    function remainingToken() public view returns(uint256) {
+        return _aeternam.allowance(_aeternam.owner(), address(this));
+    }
 
 }

@@ -10,9 +10,9 @@ describe('Aeternam Token', async function () {
   const NAME = 'Aeternam';
   const SYMBOL = 'AETER';
   const INIT_SUPPLY = ethers.utils.parseEther('10000000000');
-  const ICO_START_TIME = 1628410088; /* 1628410088 is 08/08/2021 at 8h8m8s GMT time */
-  const ICO_END_TIME = 1629101288; /* 1629101288 is 08/16/2021 at 8h8m8s GMT time */
   const RATE = 10 ** 9;
+  // The amount that the sender will send to the contract, 10 ** 9 equals to one gwei
+  const AMMOUNT_TO_BUY =  RATE;
   beforeEach(async function () {
     [dev, owner, alice, ico] = await ethers.getSigners();
     Aeternam = await ethers.getContractFactory('Aeternam');
@@ -20,12 +20,13 @@ describe('Aeternam Token', async function () {
     await aeternam.deployed();
 
     Ico = await ethers.getContractFactory('Ico');
-    ico = await Ico.connect(owner).deploy(aeternam.address, ICO_START_TIME , ICO_END_TIME, RATE);                                                                   
+    ico = await Ico.connect(owner).deploy(aeternam.address, RATE);                                                                   
     await ico.deployed();
     await aeternam.connect(owner).approve(ico.address, INIT_SUPPLY);
+    // The user that have some token, can approve calculator and then the calculator can spend and recieve token 
   });
 
-  // This is where we test that the constructor of Aeternam Token actually worked right. 
+  // Deployement test (for the token) 
   it(`Should have name ${NAME}`, async function () {
     expect(await aeternam.name()).to.equal(NAME);
   });
@@ -39,7 +40,7 @@ describe('Aeternam Token', async function () {
     expect(await aeternam.balanceOf(owner.address)).to.equal(INIT_SUPPLY);
   });
   
-  // This is where we test that the Ico contract, is able to spend the total ammount of tokens of aeternam.owner
+  // Owner approve ICO to spend his whole supply
   describe('ICO INIT-SUPPY', async function () {
     it("Should approve the Ico contract to transfer aeternam's Owner's funds.", async function () {
       expect(await aeternam.allowance(owner.address, ico.address)).to.be.equal(INIT_SUPPLY);
@@ -47,27 +48,79 @@ describe('Aeternam Token', async function () {
   });
   
   // This is where we test our time-based business logic.
-  describe('ICO : Time-Based-Logic guards : Too late, or too early.', async function () {
-    // Initalizing the function buyToken with time-based modifier, triggering it too early, should revert. 
-    it("Should revert if the function buyToken is called before the ICO Begins.", async function () {
-      await expect(ico.connect(alice).buyTokens())
-      .to.be.reverted;
-    });
-    it("Should transfer the amount of token to the buyer.", async function () {
-      // The amount that the sender will send to the contract, 10 ** 9 equals to one gwei
-      const AMMOUNT_TO_BUY = 10 ** 9;
-      await ethers.provider.send("evm_setNextBlockTimestamp", [ICO_START_TIME]);
-      await ethers.provider.send('evm_mine');
+  describe('Active Ico', async function() {
+     it("Should transfer the amount of token to the buyer.", async function () {
       await ico.connect(alice).buyTokens({value: AMMOUNT_TO_BUY});
-      // When we check for the transfer of the tokens to the spender's wallet, we need to use parseEther 
       expect(await aeternam.connect(alice).balanceOf(alice.address)).to.equal(ethers.utils.parseEther('1'));
      });
-    // Initalizing the function buyToken with time-based modifier, triggering it too late, should revert
-    it("Should revert if the function buyToken is called after the ICO Ended.", async function () {
-      await ethers.provider.send("evm_setNextBlockTimestamp", [ICO_END_TIME]);
-      await ethers.provider.send('evm_mine');
-      await expect(ico.connect(alice).buyTokens())
-      .to.be.reverted;
+     it("Should decrease ether balance of sender", async function () {
+      prov = await ethers.getDefaultProvider()
+      aliceBalance = await prov.getBalance(alice.address)
+      tx = await ico.connect(alice).buyTokens({value: AMMOUNT_TO_BUY})
+      expect(tx).to.changeEtherBalance(alice, aliceBalance - AMMOUNT_TO_BUY)
+     });
+     it("Should emit event when investor buy tokens.", async function () {
+      await expect(ico.connect(alice).buyTokens({value: AMMOUNT_TO_BUY})) 
+      .to.emit(ico, 'TokenBuyed')
+      .withArgs(alice.address, ethers.utils.parseEther('1'));
+     });
+     it("Should increase the balance of the contract", async function() {
+      tx = await ico.connect(alice).buyTokens({value: AMMOUNT_TO_BUY})
+      expect(tx).to.changeEtherBalance(ico, AMMOUNT_TO_BUY);
+     });
+     it('Should revert if owner of ico tries to buy tokens', async function () {
+      await expect(ico.connect(owner).buyTokens({value: AMMOUNT_TO_BUY}))
+        .to.be.reverted;
+     });
+     it("Should revert if the ICO contract is not allowed to spend aeternam.owner tokens", async function() {
+      ico = await Ico.connect(owner).deploy(aeternam.address, RATE);
+      ico.deployed();
+      await expect(ico.connect(alice).buyTokens({value: AMMOUNT_TO_BUY}))
+      .to.be.revertedWith("ICO : aeternam is not being sold yet.");
+     });
+  });
+
+  describe('Withdrawal', async function() {
+    beforeEach(async function () {
+      await ico.connect(alice).buyTokens({value: 10 * RATE, gasPrice: 0});
+      total = await ico.balanceOfIco()
+    })  
+     it("Should withdraw the funds to the owner's wallet", async function() {
+      await network.provider.send('evm_increaseTime', [604801])
+      await network.provider.send('evm_mine');
+      expect (await ico.connect(owner).withdrawProfit()).to.changeEtherBalance(owner, 10 * RATE);
+      expect(await ico.balanceOfIco()).to.equal(0);
+    });
+     it("Should emit event when owner withdraws", async function () {
+      await network.provider.send('evm_increaseTime', [604801])
+      await network.provider.send('evm_mine');
+      expect(await ico.connect(owner).withdrawProfit())
+        .to.emit(ico, 'Withdrew')
+        .withArgs(owner.address, total);
+     });
+     it('Should revert if not owner', async function () {
+      await expect(ico.connect(alice).withdrawProfit()).to.be.revertedWith('Ownable: caller is not the owner');
+    });
+     it('Should revert if ico is not over', async function () {
+      await expect(ico.connect(owner).withdrawProfit()).to.be.revertedWith(
+        "ICO: Ico is not over yet"
+      );
     });
   });
+
+  describe("Getters", async function () {
+    it("Should return the balance of ICO (in ethers)", async function () {
+      await ico.connect(alice).buyTokens({value : AMMOUNT_TO_BUY})
+      expect(await ico.connect(owner).balanceOfIco())
+      .to.equal(AMMOUNT_TO_BUY);
+    });
+    it("Should return the remaining tokens in allowance", async function() {
+      allowance =  await aeternam.connect(owner).allowance(owner.address, ico.address)
+      await ico.connect(alice).buyTokens({value: AMMOUNT_TO_BUY})
+      newAllowance = await aeternam.connect(owner).allowance(owner.address, ico.address)
+      expect(await ico.connect(owner).remainingToken())
+      .to.equal(newAllowance)
+    });
+  });
+
 });
